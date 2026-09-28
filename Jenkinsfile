@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -6,28 +7,28 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-                bat 'npm ci'
+                sh 'npm ci'
             }
         }
 
         stage('Build Application') {
             steps {
                 echo 'Building furniture visualizer...'
-                bat 'npm run build'
+                sh 'npm run build'
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo 'Building Docker image...'
-                bat 'docker build -t furniture-visualizer:latest .'
+                sh 'docker build -t furniture-visualizer:latest .'
             }
         }
 
         stage('Docker Test') {
             steps {
                 echo 'Checking Docker image...'
-                bat 'docker images furniture-visualizer'
+                sh 'docker images furniture-visualizer'
             }
         }
     }
@@ -42,3 +43,4 @@ pipeline {
         }
     }
 }
+```
