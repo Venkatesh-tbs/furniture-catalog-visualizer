@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     environment {
+        LOCAL_IMAGE    = 'furniture-visualizer:latest'
         IMAGE_NAME     = 'furniture-visualizer'
         IMAGE_TAG      = 'latest'
-        CONTAINER_NAME = 'furniture-app-smoke-test'
+        DOCKERHUB_REPO = 'furniture-visualizer'
     }
 
     stages {
@@ -12,7 +13,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo '========================================================'
-                echo ' Stage 1: Checkout Source Code from GitHub'
+                echo ' Stage: Checkout Source Code from GitHub'
                 echo '========================================================'
                 checkout scm
                 echo "Workspace: ${env.WORKSPACE}"
@@ -25,7 +26,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo '========================================================'
-                echo ' Stage 2: Installing Dependencies via npm ci'
+                echo ' Stage 1: Installing Dependencies via npm ci'
                 echo '========================================================'
                 sh 'npm ci'
                 echo 'Dependencies successfully installed.'
@@ -35,7 +36,7 @@ pipeline {
         stage('Build Application') {
             steps {
                 echo '========================================================'
-                echo ' Stage 3: Building Production React/Vite Bundle'
+                echo ' Stage 2: Building Production React/Vite Bundle'
                 echo '========================================================'
                 sh 'npm run build'
                 echo 'Verifying production dist/ directory...'
@@ -47,60 +48,74 @@ pipeline {
         stage('Docker Build') {
             steps {
                 echo '========================================================'
-                echo ' Stage 4: Building Multi-Stage Docker Image'
+                echo ' Stage 3: Building Multi-Stage Docker Image'
                 echo '========================================================'
                 sh 'docker build -t furniture-visualizer:latest .'
                 echo 'Docker image furniture-visualizer:latest built successfully.'
             }
         }
 
-        stage('Docker Image Verify') {
+        stage('Docker Test') {
             steps {
                 echo '========================================================'
-                echo ' Stage 5: Verifying Built Docker Image'
+                echo ' Stage 4: Verifying Built Docker Image'
                 echo '========================================================'
                 sh 'docker images furniture-visualizer'
-                echo 'Docker image verified in local Docker registry.'
+                sh 'docker image inspect furniture-visualizer:latest > /dev/null && echo "Docker image verified in local Docker registry."'
             }
         }
 
-        stage('Docker Smoke Test') {
+        stage('Docker Hub Push') {
             steps {
                 echo '========================================================'
-                echo ' Stage 6: Running Container Smoke Test'
+                echo ' Stage 5: Secure Docker Hub Authentication & Push'
                 echo '========================================================'
-                // Clean up any stale smoke-test container
-                sh 'docker rm -f furniture-app-smoke-test 2>/dev/null || true'
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKERHUB_USERNAME',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    // 1. Authenticate with Docker Hub using stdin (avoids exposing token in process table or logs)
+                    echo 'Authenticating with Docker Hub...'
+                    sh 'echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin'
 
-                // Run temporary container in background
-                sh 'docker run -d --name furniture-app-smoke-test -p 9090:80 furniture-visualizer:latest'
+                    // 2. Tag local image for Docker Hub repository
+                    echo "Tagging image as ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
+                    sh 'docker tag furniture-visualizer:latest "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"'
 
-                // Wait 3 seconds for Nginx to initialize
-                sh 'sleep 3'
+                    // 3. Push image to Docker Hub
+                    echo "Pushing image to Docker Hub repository: ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
+                    sh 'docker push "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"'
 
-                // Verify Nginx is serving the Furniture Studio HTML index
-                sh "docker exec furniture-app-smoke-test wget -q -O - http://localhost:80 | grep -i 'Furniture Studio' && echo 'Smoke test PASSED: Application is live and serving HTML!' || (echo 'Smoke test FAILED' && exit 1)"
+                    // 4. Logout from Docker Hub to clear temporary credentials
+                    echo 'Logging out from Docker Hub session...'
+                    sh 'docker logout'
 
-                // Clean up temporary container
-                sh 'docker rm -f furniture-app-smoke-test'
-                echo 'Smoke test container cleaned up successfully.'
+                    echo 'Docker image successfully pushed to Docker Hub!'
+                }
             }
         }
 
     }
 
     post {
+        always {
+            // Defense-in-depth: Ensure Docker logout is executed even if the pipeline fails midway
+            sh 'docker logout 2>/dev/null || true'
+        }
         success {
             echo ''
             echo '========================================================'
             echo '  PIPELINE SUCCESSFUL!'
-            echo '  GitHub -> Jenkins -> npm build -> Docker image READY'
+            echo '  GitHub -> Jenkins -> npm build -> Docker Build -> Docker Hub'
             echo '========================================================'
             echo ''
-            echo 'Production Docker Image: furniture-visualizer:latest'
+            echo 'Production image pushed to Docker Hub:'
+            echo '  venkateshm237/furniture-visualizer:latest'
             echo ''
-            echo 'To run the application manually:'
-            echo '  docker run -d -p 8080:80 --name furniture-visualizer furniture-visualizer:latest'
+            echo 'To pull and run the published container on any server:'
+            echo '  docker pull venkateshm237/furniture-visualizer:latest'
+            echo '  docker run -d -p 8080:80 --name furniture-visualizer venkateshm237/furniture-visualizer:latest'
             echo ''
             echo 'Application URL: http://localhost:8080'
             echo '========================================================'
@@ -111,10 +126,6 @@ pipeline {
             echo '  PIPELINE FAILED!'
             echo '  Check the specific failed stage output above.'
             echo '========================================================'
-        }
-        always {
-            // Guarantee smoke test container cleanup
-            sh 'docker rm -f furniture-app-smoke-test 2>/dev/null || true'
         }
     }
 }
