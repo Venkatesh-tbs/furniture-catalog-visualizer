@@ -75,22 +75,22 @@ pipeline {
                     usernameVariable: 'DOCKERHUB_USERNAME',
                     passwordVariable: 'DOCKERHUB_TOKEN'
                 )]) {
-                    // 1. Authenticate with Docker Hub using stdin (avoids exposing token in process table or logs)
-                    echo 'Authenticating with Docker Hub...'
-                    sh 'echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin'
+                    // Retry up to 3 times to guard against transient registry network/TLS timeouts
+                    retry(3) {
+                        sh '''
+                            echo 'Authenticating with Docker Hub...'
+                            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
-                    // 2. Tag local image for Docker Hub repository
-                    echo "Tagging image as ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
-                    sh 'docker tag furniture-visualizer:latest "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"'
+                            echo "Tagging image as ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
+                            docker tag furniture-visualizer:latest "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"
 
-                    // 3. Push image to Docker Hub
-                    echo "Pushing image to Docker Hub repository: ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
-                    sh 'docker push "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"'
+                            echo "Pushing image to Docker Hub repository: ${DOCKERHUB_USERNAME}/furniture-visualizer:latest..."
+                            docker push "${DOCKERHUB_USERNAME}/furniture-visualizer:latest"
 
-                    // 4. Logout from Docker Hub to clear temporary credentials
-                    echo 'Logging out from Docker Hub session...'
-                    sh 'docker logout'
-
+                            echo 'Logging out from Docker Hub session...'
+                            docker logout
+                        '''
+                    }
                     echo 'Docker image successfully pushed to Docker Hub!'
                 }
             }
