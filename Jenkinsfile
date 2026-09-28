@@ -49,8 +49,8 @@ pipeline {
                 echo '========================================================'
                 echo ' Stage 4: Building Multi-Stage Docker Image'
                 echo '========================================================'
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+                sh 'docker build -t furniture-visualizer:latest .'
+                echo 'Docker image furniture-visualizer:latest built successfully.'
             }
         }
 
@@ -59,7 +59,7 @@ pipeline {
                 echo '========================================================'
                 echo ' Stage 5: Verifying Built Docker Image'
                 echo '========================================================'
-                sh "docker images ${IMAGE_NAME}"
+                sh 'docker images furniture-visualizer'
                 echo 'Docker image verified in local Docker registry.'
             }
         }
@@ -70,19 +70,19 @@ pipeline {
                 echo ' Stage 6: Running Container Smoke Test'
                 echo '========================================================'
                 // Clean up any stale smoke-test container
-                sh "docker rm -f ${CONTAINER_NAME} 2>/dev/null || true"
+                sh 'docker rm -f furniture-app-smoke-test 2>/dev/null || true'
 
                 // Run temporary container in background
-                sh "docker run -d --name ${CONTAINER_NAME} -p 9090:80 ${IMAGE_NAME}:${IMAGE_TAG}"
+                sh 'docker run -d --name furniture-app-smoke-test -p 9090:80 furniture-visualizer:latest'
 
                 // Wait 3 seconds for Nginx to initialize
                 sh 'sleep 3'
 
                 // Verify Nginx is serving the Furniture Studio HTML index
-                sh "docker exec ${CONTAINER_NAME} wget -q -O - http://localhost:80 | grep -i 'Furniture Studio' && echo 'Smoke test PASSED: Application is live and serving HTML!' || (echo 'Smoke test FAILED' && exit 1)"
+                sh "docker exec furniture-app-smoke-test wget -q -O - http://localhost:80 | grep -i 'Furniture Studio' && echo 'Smoke test PASSED: Application is live and serving HTML!' || (echo 'Smoke test FAILED' && exit 1)"
 
                 // Clean up temporary container
-                sh "docker rm -f ${CONTAINER_NAME}"
+                sh 'docker rm -f furniture-app-smoke-test'
                 echo 'Smoke test container cleaned up successfully.'
             }
         }
@@ -97,10 +97,10 @@ pipeline {
             echo '  GitHub -> Jenkins -> npm build -> Docker image READY'
             echo '========================================================'
             echo ''
-            echo "Production Docker Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo 'Production Docker Image: furniture-visualizer:latest'
             echo ''
             echo 'To run the application manually:'
-            echo "  docker run -d -p 8080:80 --name furniture-visualizer ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo '  docker run -d -p 8080:80 --name furniture-visualizer furniture-visualizer:latest'
             echo ''
             echo 'Application URL: http://localhost:8080'
             echo '========================================================'
@@ -114,7 +114,7 @@ pipeline {
         }
         always {
             // Guarantee smoke test container cleanup
-            sh "docker rm -f ${CONTAINER_NAME} 2>/dev/null || true"
+            sh 'docker rm -f furniture-app-smoke-test 2>/dev/null || true'
         }
     }
 }
