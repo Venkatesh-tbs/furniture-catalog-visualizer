@@ -1,0 +1,24 @@
+# Dependencies (rebuilt inside container)
+node_modules
+
+# Build output (rebuilt inside container)
+dist
+
+# Git history
+.git
+.gitignore
+
+# IDE / Editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD files (not needed inside Docker image)
+Jenkinsfile
+docker-compose*.yml
+*.md
